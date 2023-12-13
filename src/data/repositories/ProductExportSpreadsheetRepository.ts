@@ -1,81 +1,114 @@
+import ExcelJS from "exceljs";
 import { Product } from "../../domain/entities/Product";
 import { ProductExportRepository } from "../../domain/entities/ProductExportRepository";
-import ExcelJS from "exceljs";
+import { Maybe } from "../../utils/ts-utils";
+import _c from "../../domain/entities/generic/Collection";
+
+type Workbook = {
+    name: string;
+    sheets: Sheet<string>[];
+};
+
+type Sheet<Field extends string> = {
+    name: string;
+    columns: Record<Field, { header: string }>;
+    rows: Array<Record<Field, string | number | undefined>>;
+};
 
 export class ProductExportSpreadsheetRepository implements ProductExportRepository {
     async export(name: string, products: Product[]): Promise<void> {
-        // Create workbook
-        const wb = new ExcelJS.Workbook();
+        const [activeProducts, inactiveProducts] = this.splitProducts(products);
 
-        // Get unique products
-        let prs: Product[] = [];
-        products.forEach(p => {
-            if (prs.some(pr => pr.equals(p))) return;
-            prs.push(p);
-        });
+        const workbook: Workbook = {
+            name: name,
+            sheets: [
+                this.getProductsSheet("Active Products", activeProducts),
+                this.getProductsSheet("Inactive Products", inactiveProducts),
+                this.getSummarySheet(products),
+            ],
+        };
 
-        // Sort products by title
-        prs.sort((a, b) => {
-            if (a.title < b.title) {
-                return -1;
-            }
-            if (a.title > b.title) {
-                return 1;
-            }
-            return 0;
-        });
-
-        // add worksheet for active products
-        const sh = wb.addWorksheet("Active Products");
-
-        // Add row header
-        sh.addRow(["Id", "Title", "Quantity", "Status"]);
-
-        prs.forEach(p => {
-            if (p.status === "active") {
-                sh.addRow([p.id, p.title, p.quantity.value, p.status]);
-            }
-        });
-
-        // add worksheet for inactive products
-        const sh2 = wb.addWorksheet("Inactive Products");
-
-        // Add row header
-        sh2.addRow(["Id", "Title", "Quantity", "Status"]);
-
-        prs.forEach(p => {
-            if (p.status === "inactive") {
-                sh2.addRow([p.id, p.title, p.quantity.value, p.status]);
-            }
-        });
-
-        // Add sheet summary
-        const sh3 = wb.addWorksheet("Summary");
-
-        let total = 0;
-        let act = 0;
-        let inctv = 0;
-
-        prs.forEach(p => {
-            total += p.quantity.value;
-            if (p.status === "active") {
-                act += p.quantity.value;
-            }
-            if (p.status === "inactive") {
-                inctv += p.quantity.value;
-            }
-        });
-
-        sh3.addRow(["# Products", "# Items total", "# Items active", "# Items inactive"]);
-        sh3.addRow([
-            // If a value is zero, render an empty cell instead
-            prs.length > 0 ? prs.length : undefined,
-            total > 0 ? total : undefined,
-            act > 0 ? act : undefined,
-            inctv > 0 ? act : undefined,
-        ]);
-
-        // Write xlsx file
-        await wb.xlsx.writeFile(name);
+        this.createWorkbook(workbook);
     }
+
+    private splitProducts(products: Product[]) {
+        const activeProducts = products.filter(product => product.status === "active");
+        const inactiveProducts = products.filter(product => product.status === "inactive");
+        return [activeProducts, inactiveProducts] as const;
+    }
+
+    private getSummarySheet(
+        products: Product[]
+    ): Sheet<"productsCount" | "itemsCount" | "itemsActiveCount" | "itemsInactiveCount"> {
+        const [activeProducts, inactiveProducts] = this.splitProducts(products);
+
+        return {
+            name: "Summary",
+            columns: {
+                productsCount: { header: "# Products" },
+                itemsCount: { header: "# Items total" },
+                itemsActiveCount: { header: "# Items active" },
+                itemsInactiveCount: { header: "# Items inactive" },
+            },
+            rows: [
+                {
+                    productsCount: cellNumber(products.length),
+                    itemsCount: sumQuantities(products),
+                    itemsActiveCount: sumQuantities(activeProducts),
+                    itemsInactiveCount: sumQuantities(inactiveProducts),
+                },
+            ],
+        };
+    }
+
+    private getProductsSheet(
+        name: string,
+        products: Product[]
+    ): Sheet<"id" | "title" | "quantity" | "status"> {
+        const productRowsSortedByTitle = _c(products)
+            .uniqWith((product1, product2) => product1.equals(product2))
+            .sortBy(product => product.title)
+            .map(product => ({ ...product, quantity: product.quantity.value }))
+            .value();
+
+        return {
+            name: name,
+            columns: {
+                id: { header: "ID" },
+                title: { header: "Title" },
+                quantity: { header: "Quantity" },
+                status: { header: "Status" },
+            },
+            rows: productRowsSortedByTitle,
+        };
+    }
+
+    private createWorkbook(workbook: Workbook) {
+        const ejsWorkbook = new ExcelJS.Workbook();
+
+        workbook.sheets.forEach(sheet => {
+            const ejsSheet = ejsWorkbook.addWorksheet(sheet.name);
+            const ejsColumns = Object.entries(sheet.columns).map(([key, column]) => ({
+                header: column.header,
+                key: key,
+            }));
+
+            ejsSheet.columns = ejsColumns;
+            ejsSheet.addRows(sheet.rows);
+        });
+
+        return ejsWorkbook.xlsx.writeFile(workbook.name);
+    }
+}
+
+function cellNumber(n: number): Maybe<number> {
+    return n === 0 ? undefined : n;
+}
+
+function sumQuantities(products: Product[]): Maybe<number> {
+    return cellNumber(
+        _c(products)
+            .map(product => product.quantity.value)
+            .sum()
+    );
 }
