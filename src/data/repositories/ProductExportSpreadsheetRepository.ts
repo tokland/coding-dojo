@@ -4,17 +4,6 @@ import { ProductExportRepository } from "../../domain/entities/ProductExportRepo
 import { Maybe } from "../../utils/ts-utils";
 import _c from "../../domain/entities/generic/Collection";
 
-type Workbook = {
-    name: string;
-    sheets: Sheet<string>[];
-};
-
-type Sheet<Field extends string> = {
-    name: string;
-    columns: Record<Field, { header: string }>;
-    rows: Array<Record<Field, string | number | undefined>>;
-};
-
 export class ProductExportSpreadsheetRepository implements ProductExportRepository {
     async export(name: string, products: Product[]): Promise<void> {
         const [activeProducts, inactiveProducts] = this.splitProducts(products);
@@ -28,7 +17,7 @@ export class ProductExportSpreadsheetRepository implements ProductExportReposito
             ],
         };
 
-        this.createWorkbook(workbook);
+        createWorkbook(workbook);
     }
 
     private splitProducts(products: Product[]) {
@@ -37,18 +26,21 @@ export class ProductExportSpreadsheetRepository implements ProductExportReposito
         return [activeProducts, inactiveProducts] as const;
     }
 
-    private getSummarySheet(
-        products: Product[]
-    ): Sheet<"productsCount" | "itemsCount" | "itemsActiveCount" | "itemsInactiveCount"> {
+    private getSummarySheet(products: Product[]): Sheet<{
+        productsCount: number;
+        itemsCount: number;
+        itemsActiveCount: number;
+        itemsInactiveCount: number;
+    }> {
         const [activeProducts, inactiveProducts] = this.splitProducts(products);
 
-        return {
+        return sheet({
             name: "Summary",
             columns: {
-                productsCount: { header: "# Products" },
-                itemsCount: { header: "# Items total" },
-                itemsActiveCount: { header: "# Items active" },
-                itemsInactiveCount: { header: "# Items inactive" },
+                productsCount: { header: "# Products", type: types.number },
+                itemsCount: { header: "# Items total", type: types.number },
+                itemsActiveCount: { header: "# Items active", type: types.number },
+                itemsInactiveCount: { header: "# Items inactive", type: types.number },
             },
             rows: [
                 {
@@ -58,13 +50,13 @@ export class ProductExportSpreadsheetRepository implements ProductExportReposito
                     itemsInactiveCount: sumQuantities(inactiveProducts),
                 },
             ],
-        };
+        });
     }
 
     private getProductsSheet(
         name: string,
         products: Product[]
-    ): Sheet<"id" | "title" | "quantity" | "status"> {
+    ): Sheet<{ id: string; title: string; quantity: number; status: string }> {
         const productRowsSortedByTitle = _c(products)
             .uniqWith((product1, product2) => product1.equals(product2))
             .sortBy(product => product.title)
@@ -82,23 +74,6 @@ export class ProductExportSpreadsheetRepository implements ProductExportReposito
             rows: productRowsSortedByTitle,
         };
     }
-
-    private createWorkbook(workbook: Workbook) {
-        const ejsWorkbook = new ExcelJS.Workbook();
-
-        workbook.sheets.forEach(sheet => {
-            const ejsSheet = ejsWorkbook.addWorksheet(sheet.name);
-            const ejsColumns = Object.entries(sheet.columns).map(([key, column]) => ({
-                header: column.header,
-                key: key,
-            }));
-
-            ejsSheet.columns = ejsColumns;
-            ejsSheet.addRows(sheet.rows);
-        });
-
-        return ejsWorkbook.xlsx.writeFile(workbook.name);
-    }
 }
 
 function cellNumber(n: number): Maybe<number> {
@@ -112,3 +87,80 @@ function sumQuantities(products: Product[]): Maybe<number> {
             .sum()
     );
 }
+
+// All this section can be moved to another file
+
+/* Workbook data entity */
+
+type BaseSchema = Record<string, string | number>;
+
+type Workbook = {
+    name: string;
+    sheets: Sheet<BaseSchema>[];
+};
+
+type Sheet<Schema extends BaseSchema> = {
+    name: string;
+    columns: Record<keyof Schema, { header: string }>;
+    rows: Array<{ [K in keyof Schema]: Schema[K] | undefined }>;
+};
+
+// Builder
+
+type BaseColumns = Record<string, { header: string; type: string | number }>;
+
+function sheet<Columns extends BaseColumns>(options: {
+    name: string;
+    columns: Columns;
+    rows: Array<{
+        [K in keyof Columns]: Columns[K]["type"] | undefined;
+    }>;
+}): Sheet<{ [K in keyof Columns]: Columns[K]["type"] }> {
+    return options;
+}
+
+function workbook(options: Workbook): Workbook {
+    return options;
+}
+
+const types = { string: "", number: 0 };
+
+// Workbook writer using ExcelJS
+
+function createWorkbook(workbook: Workbook): Promise<void> {
+    const ejsWorkbook = new ExcelJS.Workbook();
+
+    workbook.sheets.forEach(sheet => {
+        const ejsSheet = ejsWorkbook.addWorksheet(sheet.name);
+        const ejsColumns = Object.entries(sheet.columns).map(([key, column]) => ({
+            header: column.header,
+            key: key,
+        }));
+
+        ejsSheet.columns = ejsColumns;
+        ejsSheet.addRows(sheet.rows);
+    });
+
+    return ejsWorkbook.xlsx.writeFile(workbook.name);
+}
+
+/* Example */
+
+const productsSheet = sheet({
+    name: "Products",
+    columns: {
+        id: { header: "ID", type: types.string },
+        title: { header: "Title", type: types.string },
+        quantity: { header: "Quantity", type: types.number },
+        status: { header: "Status", type: types.string },
+    },
+    rows: [
+        { id: "1", title: "Shoes", quantity: 5, status: "enabled" },
+        { id: "2", title: "T-Shirt", quantity: 10, status: "disabled" },
+    ],
+});
+
+const workbookExample = workbook({
+    name: "Example",
+    sheets: [productsSheet],
+});

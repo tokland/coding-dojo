@@ -1,6 +1,12 @@
 import { command, run, string, option } from "cmd-ts";
 import path from "path";
 import { D2Api } from "../types/d2-api";
+import { ProductExportSpreadsheetRepository } from "../data/repositories/ProductExportSpreadsheetRepository";
+import { Product } from "../domain/entities/Product";
+
+new ProductExportSpreadsheetRepository().export("out.xlsx", [
+    Product.create("id1", "title", "url", "12").getOrThrow(),
+]);
 
 // Usage:
 // npx ts-node src/scripts/example.ts -u "https://dev.eyeseetea.com/play" -a admin:district
