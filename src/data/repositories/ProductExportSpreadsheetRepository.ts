@@ -6,18 +6,26 @@ import { Sheet, createWorkbook, sheet, types, workbook } from "../Spreadsheets";
 
 export class ProductExportSpreadsheetRepository implements ProductExportRepository {
     async export(name: string, products: Product[]): Promise<void> {
-        const [activeProducts, inactiveProducts] = this.splitProducts(products);
-
         const productsWorkbook = workbook({
             name: name,
             sheets: [
-                this.getProductsSheet("Active Products", activeProducts),
-                this.getProductsSheet("Inactive Products", inactiveProducts),
+                this.getActiveProductsSheet(products),
+                this.getInactiveProductsSheet(products),
                 this.getSummarySheet(products),
             ],
         });
 
         createWorkbook(productsWorkbook);
+    }
+
+    private getActiveProductsSheet(products: Product[]) {
+        const productsByState = splitProducts(products);
+        return this.getProductsSheet("Active Products", productsByState.active);
+    }
+
+    private getInactiveProductsSheet(products: Product[]) {
+        const productsByState = splitProducts(products);
+        return this.getProductsSheet("Inactive Products", productsByState.inactive);
     }
 
     private getProductsSheet(
@@ -48,7 +56,7 @@ export class ProductExportSpreadsheetRepository implements ProductExportReposito
         itemsActiveCount: number;
         itemsInactiveCount: number;
     }> {
-        const [activeProducts, inactiveProducts] = this.splitProducts(products);
+        const productsByState = splitProducts(products);
 
         return sheet({
             name: "Summary",
@@ -60,28 +68,27 @@ export class ProductExportSpreadsheetRepository implements ProductExportReposito
             },
             rows: [
                 {
-                    productsCount: cellNumber(products.length),
+                    productsCount: getCellNumber(products.length),
                     itemsCount: sumQuantities(products),
-                    itemsActiveCount: sumQuantities(activeProducts),
-                    itemsInactiveCount: sumQuantities(inactiveProducts),
+                    itemsActiveCount: sumQuantities(productsByState.active),
+                    itemsInactiveCount: sumQuantities(productsByState.inactive),
                 },
             ],
         });
     }
-
-    private splitProducts(products: Product[]) {
-        const activeProducts = products.filter(product => product.status === "active");
-        const inactiveProducts = products.filter(product => product.status === "inactive");
-        return [activeProducts, inactiveProducts] as const;
-    }
 }
 
-function cellNumber(n: number): Maybe<number> {
+function splitProducts(products: Product[]): { active: Product[]; inactive: Product[] } {
+    const [active, inactive] = _c(products).partition(product => product.status === "active");
+    return { active: active.value(), inactive: inactive.value() };
+}
+
+function getCellNumber(n: number): Maybe<number> {
     return n === 0 ? undefined : n;
 }
 
 function sumQuantities(products: Product[]): Maybe<number> {
-    return cellNumber(
+    return getCellNumber(
         _c(products)
             .map(product => product.quantity.value)
             .sum()
