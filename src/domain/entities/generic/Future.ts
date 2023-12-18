@@ -155,6 +155,11 @@ export class Future<E, D> {
             return Future.block<E, U>(blockFn);
         };
     }
+
+    static fromPromise<E, T>(promise: Promise<T>) {
+        const cpromise = new rcpromise.CancellablePromise(promise, () => {});
+        return new Future<E, T>(() => cpromise);
+    }
 }
 
 export type Cancel = (() => void) | undefined;

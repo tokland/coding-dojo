@@ -166,9 +166,15 @@ export class Collection<T> {
         return _c([x, ...this.xs]);
     }
 
-    tap(fn: (xs: Collection<T>) => void) {
-        fn(this);
+    tap(fn: (xs: T[]) => void) {
+        fn(this.xs);
         return this;
+    }
+
+    partition(predicate: (x: T) => boolean): [Collection<T>, Collection<T>] {
+        const matches = this.filter(x => predicate(x));
+        const nonMatches = this.filter(x => !predicate(x));
+        return [matches, nonMatches];
     }
 
     splitAt(indexes: number[]): Collection<Collection<T>> {
@@ -334,6 +340,8 @@ function compareArray<T>(a: T, b: T, items: OrderItem<T>[]): CompareRes {
 
 type OrderItem<T> = [(obj: T) => unknown, "asc" | "desc"];
 
-export default function _c<T>(xs: T[]): Collection<T> {
+export function _c<T>(xs: T[]): Collection<T> {
     return Collection.from(xs);
 }
+
+export default _c;

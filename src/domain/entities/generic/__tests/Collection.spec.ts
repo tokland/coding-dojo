@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import _, { Collection } from "../Collection";
 import { expectTypeOf } from "expect-type";
+import { Collection, _c as _ } from "../Collection";
 
 describe("Collection", () => {
     test("range", () => {
@@ -107,6 +107,17 @@ describe("Collection", () => {
         const valueDefault = values.find(value => value === 4, { or: 10 });
         expect(valueDefault).toEqual(10);
         expectTypeOf(valueDefault).toEqualTypeOf<number>();
+    });
+
+    test("partition", () => {
+        expect(
+            _([0, 1, 2, 3, 4, 5])
+                .partition(x => x % 2 == 0)
+                .map(xs => xs.value())
+        ).toEqual([
+            [0, 2, 4],
+            [1, 3, 5],
+        ]);
     });
 
     test("splitAt", () => {

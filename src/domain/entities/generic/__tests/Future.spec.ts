@@ -143,8 +143,7 @@ describe("Future.block", () => {
 
             const result$ = Future.block_<Error>()(async $ => {
                 if (value1 > 0) $.throw(new Error("message"));
-                const value = await $(Future.success(double(1)));
-                return value;
+                return $(Future.success(double(1)));
             });
 
             await expectAsync(result$, { toThrow: new Error("message") });
