@@ -76,6 +76,20 @@ describe("Transformations", () => {
         await expectAsync(value2$, { toEqual: "1" });
     });
 
+    describe("isomap", () => {
+        it("maps values of same type", async () => {
+            const value1$ = Future.success(1) as Future<Error, number>;
+            const value2$ = value1$.isomap(x => x + 1);
+            await expectAsync(value2$, { toEqual: 2 });
+        });
+
+        it("forces the function to map values of the same type", () => {
+            const value1$ = Future.success(1) as Future<Error, number>;
+            type IsoMapper<E, D> = (fn: (data: D) => D) => Future<E, D>;
+            expectTypeOf(value1$.isomap).toEqualTypeOf<IsoMapper<Error, number>>();
+        });
+    });
+
     test("mapError", async () => {
         const value1$ = Future.error(1);
         const value2$ = value1$.mapError(x => x.toString());

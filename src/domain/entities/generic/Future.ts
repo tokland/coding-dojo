@@ -49,6 +49,10 @@ export class Future<E, D> {
         return new Future(() => this._promise().then(fn));
     }
 
+    isomap(fn: (data: D) => D): Future<E, D> {
+        return this.map(fn);
+    }
+
     mapError<E2>(fn: (error: E) => E2): Future<E2, D> {
         return new Future(() =>
             this._promise().catch((error: E) => {
