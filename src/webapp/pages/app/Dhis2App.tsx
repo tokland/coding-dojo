@@ -89,9 +89,6 @@ const configI18n = ({ keyUiLocale }: { keyUiLocale: string }) => {
     document.documentElement.setAttribute("dir", isLangRTL(keyUiLocale) ? "rtl" : "ltr");
 };
 
-type Result<Data, E> =
-    | { type: "loading" }
-    | { type: "loaded"; data: Data }
-    | { type: "error"; error: E };
+type Result<Data, E> = { type: "loading" } | { type: "loaded"; data: Data } | { type: "error"; error: E };
 
 type CompositionRootResult = Result<Data, { baseUrl: string; error: Error }>;

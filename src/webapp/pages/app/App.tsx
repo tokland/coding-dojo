@@ -46,10 +46,7 @@ function App(props: AppProps) {
                     <HeaderBar appName="Skeleton App" />
 
                     {appConfig.feedback && appContext && (
-                        <Feedback
-                            options={appConfig.feedback}
-                            username={appContext.currentUser.username}
-                        />
+                        <Feedback options={appConfig.feedback} username={appContext.currentUser.username} />
                     )}
 
                     <div id="app" className="content">

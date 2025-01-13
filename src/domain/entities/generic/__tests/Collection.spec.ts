@@ -188,9 +188,7 @@ describe("Collection", () => {
         const values = _([2, 33, 1, 4]);
 
         expect(
-            values
-                .sortBy(x => x, { compareFn: (a, b) => (a === 1 ? -1 : b === 1 ? +1 : 0) })
-                .toArray()
+            values.sortBy(x => x, { compareFn: (a, b) => (a === 1 ? -1 : b === 1 ? +1 : 0) }).toArray()
         ).toEqual([1, 2, 33, 4]);
     });
 

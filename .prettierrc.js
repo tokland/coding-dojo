@@ -1,7 +1,7 @@
 /** @format */
 
 module.exports = {
-    printWidth: 100,
+    printWidth: 110,
     tabWidth: 4,
     useTabs: false,
     semi: true,

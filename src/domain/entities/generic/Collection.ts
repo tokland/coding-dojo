@@ -75,9 +75,7 @@ export class Collection<T> {
     }
 
     compact(): Collection<NonNullable<T>> {
-        return this.reject(x => x === undefined || x === null) as unknown as Collection<
-            NonNullable<T>
-        >;
+        return this.reject(x => x === undefined || x === null) as unknown as Collection<NonNullable<T>>;
     }
 
     compactMap<U>(fn: (x: T) => U | undefined | null): Collection<U> {
@@ -308,8 +306,7 @@ type CompareFn<T> = (a: T, b: T) => CompareRes;
 type Direction = "asc" | "desc";
 
 function defaultCompareFn<T>(a: T, b: T, direction: Direction = "asc"): CompareRes {
-    const [value1, value2] =
-        direction === "asc" ? [1 as const, -1 as const] : [-1 as const, 1 as const];
+    const [value1, value2] = direction === "asc" ? [1 as const, -1 as const] : [-1 as const, 1 as const];
     return a > b ? value1 : b > a ? value2 : 0;
 }
 

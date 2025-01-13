@@ -5,7 +5,7 @@ import { Future } from "./domain/entities/generic/Future";
 
 type Id = string;
 
-type Async<T> = Future<Error, T>;
+type Async<Data> = Future<Error, Data>;
 
 class Manager extends Struct<{
     id: Id;
@@ -36,8 +36,8 @@ class CalendarMonth extends Struct<{
     year: number;
     month: number;
 }>() {
-    format(): string {
-        return `${this.year}-${this.month}`;
+    toDate() {
+        return new Date(this.year, this.month - 1, 1);
     }
 }
 
@@ -56,8 +56,7 @@ interface ManagerRepository {
 
 interface TimeTrackingRepository {
     get(options: { managerId: Id; months: CalendarMonth[] }): Async<TimeTracking[]>;
-    // or should we have a approve method instead?
-    save(timeTrackings: TimeTracking[]): Async<void>;
+    save(timeTrackings: TimeTracking[]): Async<void>; // or should we have approve() instead?
 }
 
 interface MessageRepository {
@@ -78,14 +77,12 @@ export class ApproveManagerTimeTrackingUseCase {
     execute(options: { month: CalendarMonth; managerId: Id }): Async<void> {
         return this.getTimeTrackings(options)
             .map(timeTrackings => this.approveTimeTrackings(timeTrackings))
-            .flatMap(timeTrackingsApproved =>
-                this.repositories.timeTracking.save(timeTrackingsApproved)
-            )
+            .flatMap(timeTrackingsApproved => this.repositories.timeTracking.save(timeTrackingsApproved))
             .flatMap(() => this.repositories.manager.getById(options.managerId))
             .flatMap(manager => this.sendMessageToManager(manager, { month: options.month }));
     }
 
-    // As a demo on how to use Future.block (which allows a promise-like syntax)
+    // Demo: promise-like syntax with Future.block
     executeUsingNewAsyncBlock(options: { month: CalendarMonth; managerId: Id }): Async<void> {
         return Future.block(async $ => {
             const timeTrackings = await $(this.getTimeTrackings(options));
@@ -98,10 +95,7 @@ export class ApproveManagerTimeTrackingUseCase {
 
     // Create private methods for long actions so the `execute` method stays readable
 
-    private getTimeTrackings(options: {
-        month: CalendarMonth;
-        managerId: Id;
-    }): Async<TimeTracking[]> {
+    private getTimeTrackings(options: { month: CalendarMonth; managerId: Id }): Async<TimeTracking[]> {
         return this.repositories.timeTracking.get({
             managerId: options.managerId,
             months: [options.month],
@@ -115,14 +109,18 @@ export class ApproveManagerTimeTrackingUseCase {
     }
 
     private sendMessageToManager(manager: Manager, options: { month: CalendarMonth }): Async<void> {
+        const monthName = options.month
+            .toDate()
+            .toLocaleString("default", { month: "long", year: "numeric" });
+
         return this.repositories.message.send(
-            new Message({
+            Message.create({
                 recipients: [manager.email],
                 title: "Time tracking approved",
-                text: `Your time tracking for ${options.month.format()} has been approved`,
+                text: `Your time tracking for ${monthName} has been approved`,
             })
         );
     }
 }
 
-// DATA: repository implementations (NOT DONE)
+// DATA: repository implementations
