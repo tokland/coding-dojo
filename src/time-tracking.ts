@@ -35,13 +35,9 @@ class CalendarDay extends Struct<{
 class CalendarMonth extends Struct<{
     year: number;
     month: number;
-}>() {
-    toDate() {
-        return new Date(this.year, this.month - 1, 1);
-    }
-}
+}>() {}
 
-// or maybe Notification?
+// naming: Notification?
 class Message extends Struct<{
     recipients: string[];
     title: string;
@@ -56,7 +52,8 @@ interface ManagerRepository {
 
 interface TimeTrackingRepository {
     get(options: { managerId: Id; months: CalendarMonth[] }): Async<TimeTracking[]>;
-    save(timeTrackings: TimeTracking[]): Async<void>; // or should we have approve() instead?
+    // save() instead of approve() allows the approval workflow to live in the domain layer
+    save(timeTrackings: TimeTracking[]): Async<void>;
 }
 
 interface MessageRepository {
@@ -78,8 +75,7 @@ export class ApproveManagerTimeTrackingUseCase {
         return this.getTimeTrackings(options)
             .map(timeTrackings => this.approveTimeTrackings(timeTrackings))
             .flatMap(timeTrackingsApproved => this.repositories.timeTracking.save(timeTrackingsApproved))
-            .flatMap(() => this.repositories.manager.getById(options.managerId))
-            .flatMap(manager => this.sendMessageToManager(manager, { month: options.month }));
+            .flatMap(() => this.sendApprovalMessageToManager(options));
     }
 
     // Demo: promise-like syntax with Future.block
@@ -88,8 +84,7 @@ export class ApproveManagerTimeTrackingUseCase {
             const timeTrackings = await $(this.getTimeTrackings(options));
             const timeTrackingsApproved = this.approveTimeTrackings(timeTrackings);
             await $(this.repositories.timeTracking.save(timeTrackingsApproved));
-            const manager = await $(this.repositories.manager.getById(options.managerId));
-            await $(this.sendMessageToManager(manager, { month: options.month }));
+            await $(this.sendApprovalMessageToManager(options));
         });
     }
 
@@ -102,24 +97,23 @@ export class ApproveManagerTimeTrackingUseCase {
         });
     }
 
+    // This could also be in the entity, as a static method
     private approveTimeTrackings(timeTrackings: TimeTracking[]): TimeTracking[] {
         return timeTrackings
             .filter(timeTracking => !timeTracking.isApproved)
             .map(timeTracking => timeTracking.approve());
     }
 
-    private sendMessageToManager(manager: Manager, options: { month: CalendarMonth }): Async<void> {
-        const monthName = options.month
-            .toDate()
-            .toLocaleString("default", { month: "long", year: "numeric" });
-
-        return this.repositories.message.send(
-            Message.create({
-                recipients: [manager.email],
-                title: "Time tracking approved",
-                text: `Your time tracking for ${monthName} has been approved`,
-            })
-        );
+    private sendApprovalMessageToManager(options: { managerId: Id; month: CalendarMonth }): Async<void> {
+        return this.repositories.manager.getById(options.managerId).flatMap(manager => {
+            return this.repositories.message.send(
+                Message.create({
+                    recipients: [manager.email],
+                    title: "Time tracking approved",
+                    text: `Hello ${manager.name}, your time tracking for have been approved`,
+                })
+            );
+        });
     }
 }
 
