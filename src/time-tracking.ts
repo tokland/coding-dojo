@@ -1,5 +1,5 @@
-import { Future } from "./domain/entities/generic/Future";
 import { Struct } from "./domain/entities/generic/Struct";
+import { Future } from "./domain/entities/generic/Future";
 
 // DOMAIN: entities
 
@@ -35,8 +35,13 @@ class CalendarDay extends Struct<{
 class CalendarMonth extends Struct<{
     year: number;
     month: number;
-}>() {}
+}>() {
+    format(): string {
+        return `${this.year}-${this.month}`;
+    }
+}
 
+// or maybe Notification?
 class Message extends Struct<{
     recipients: string[];
     title: string;
@@ -50,7 +55,7 @@ interface ManagerRepository {
 }
 
 interface TimeTrackingRepository {
-    get(options: { managerId: Id; month: CalendarMonth }): Async<TimeTracking[]>;
+    get(options: { managerId: Id; months: CalendarMonth[] }): Async<TimeTracking[]>;
     // or should we have a approve method instead?
     save(timeTrackings: TimeTracking[]): Async<void>;
 }
@@ -71,8 +76,7 @@ export class ApproveManagerTimeTrackingUseCase {
     ) {}
 
     execute(options: { month: CalendarMonth; managerId: Id }): Async<void> {
-        return this.repositories.timeTracking
-            .get(options)
+        return this.getTimeTrackings(options)
             .map(timeTrackings => this.approveTimeTrackings(timeTrackings))
             .flatMap(timeTrackingsApproved =>
                 this.repositories.timeTracking.save(timeTrackingsApproved)
@@ -81,10 +85,10 @@ export class ApproveManagerTimeTrackingUseCase {
             .flatMap(manager => this.sendMessageToManager(manager, { month: options.month }));
     }
 
-    // As a demo on how to use Async.block (which allows a promise-like syntax)
+    // As a demo on how to use Future.block (which allows a promise-like syntax)
     executeUsingNewAsyncBlock(options: { month: CalendarMonth; managerId: Id }): Async<void> {
         return Future.block(async $ => {
-            const timeTrackings = await $(this.repositories.timeTracking.get(options));
+            const timeTrackings = await $(this.getTimeTrackings(options));
             const timeTrackingsApproved = this.approveTimeTrackings(timeTrackings);
             await $(this.repositories.timeTracking.save(timeTrackingsApproved));
             const manager = await $(this.repositories.manager.getById(options.managerId));
@@ -92,7 +96,17 @@ export class ApproveManagerTimeTrackingUseCase {
         });
     }
 
-    // We create private methods for longer actions so the `execute` method stays readable
+    // Create private methods for long actions so the `execute` method stays readable
+
+    private getTimeTrackings(options: {
+        month: CalendarMonth;
+        managerId: Id;
+    }): Async<TimeTracking[]> {
+        return this.repositories.timeTracking.get({
+            managerId: options.managerId,
+            months: [options.month],
+        });
+    }
 
     private approveTimeTrackings(timeTrackings: TimeTracking[]): TimeTracking[] {
         return timeTrackings
@@ -105,7 +119,7 @@ export class ApproveManagerTimeTrackingUseCase {
             new Message({
                 recipients: [manager.email],
                 title: "Time tracking approved",
-                text: `Your time tracking for ${options.month} has been approved`,
+                text: `Your time tracking for ${options.month.format()} has been approved`,
             })
         );
     }
