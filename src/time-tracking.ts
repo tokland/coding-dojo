@@ -1,6 +1,6 @@
+import _ from "./domain/entities/generic/Collection";
 import { Struct } from "./domain/entities/generic/Struct";
 import { Future } from "./domain/entities/generic/Future";
-import _ from "./domain/entities/generic/Collection";
 
 // DOMAIN: entities
 
@@ -22,15 +22,15 @@ class TimeTracking extends Struct<{
         return this._update({ isApproved: true });
     }
 
+    static approve(timeTrackings: TimeTracking[]): TimeTracking[] {
+        return timeTrackings.map(timeTracking => timeTracking.approve());
+    }
+
     static getManagerIds(timeTrackings: TimeTracking[]): Id[] {
         return _(timeTrackings)
             .map(timeTracking => timeTracking.managerId)
             .uniq()
             .value();
-    }
-
-    static approve(timeTrackings: TimeTracking[]): TimeTracking[] {
-        return timeTrackings.map(timeTracking => timeTracking.approve());
     }
 }
 
@@ -58,11 +58,11 @@ type Async<Data> = Future<Error, Data>;
 // DOMAIN: repositories
 
 interface ManagerRepository {
-    getByIds(ids: Id[]): Async<Manager[]>;
+    getById(ids: Id): Async<Manager>;
 }
 
 interface TimeTrackingRepository {
-    get(options: { managerId: Id; months: CalendarMonth[] }): Async<TimeTracking[]>;
+    getByManager(options: { managerId: Id; months: CalendarMonth[] }): Async<TimeTracking[]>;
     save(timeTrackings: TimeTracking[]): Async<void>;
 }
 
@@ -75,8 +75,11 @@ interface MessageRepository {
 export class GetTimeTrackingUseCase {
     constructor(private repositories: { timeTracking: TimeTrackingRepository }) {}
 
-    execute(managerId: Id, month: CalendarMonth): Async<TimeTracking[]> {
-        return this.repositories.timeTracking.get({ managerId, months: [month] });
+    execute(options: { managerId: Id; month: CalendarMonth }): Async<TimeTracking[]> {
+        return this.repositories.timeTracking.getByManager({
+            managerId: options.managerId,
+            months: [options.month],
+        });
     }
 }
 
@@ -98,7 +101,7 @@ export class ApproveManagerTimeTrackingUseCase {
     }
 
     // Demo: promise-like syntax with Future.block
-    executeUsingNewAsyncBlock(timeTrackings: TimeTracking[]): Async<void> {
+    executeUsingFutureBlock(timeTrackings: TimeTracking[]): Async<void> {
         return Future.block(async $ => {
             const timeTrackingsApproved = TimeTracking.approve(timeTrackings);
             await $(this.repositories.timeTracking.save(timeTrackingsApproved));
@@ -106,23 +109,24 @@ export class ApproveManagerTimeTrackingUseCase {
         });
     }
 
-    // Create private methods for long actions so the `execute` method stays readable
+    // Create private methods for actions so the `execute` method stays readable
 
     private notifyManagers(timeTrackings: TimeTracking[]): Async<void> {
         return Future.block(async $ => {
-            const managerIds = TimeTracking.getManagerIds(timeTrackings);
-            const managers = await $(this.repositories.manager.getByIds(managerIds));
-            const sendMessages$ = managers.map(manager => this.notifyManager(manager));
-            await $(Future.sequential(sendMessages$));
+            for (const managerId of TimeTracking.getManagerIds(timeTrackings)) {
+                const manager = await $(this.repositories.manager.getById(managerId));
+                const timeTrackingsForManager = timeTrackings.filter(tt => tt.managerId === managerId);
+                await $(this.notifyManager(manager, timeTrackingsForManager));
+            }
         });
     }
 
-    private notifyManager(manager: Manager): Async<void> {
+    private notifyManager(manager: Manager, timeTrackings: TimeTracking[]): Async<void> {
         return this.repositories.message.send(
             Message.create({
                 recipients: [manager.email],
-                title: "Time tracking approved",
-                text: `Hello ${manager.name}, your time tracking for have been approved`,
+                title: "Time trackings approved",
+                text: `Hello ${manager.name}, time tracking approved: ${timeTrackings.length}`,
             })
         );
     }
