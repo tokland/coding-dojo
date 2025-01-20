@@ -2,10 +2,6 @@ import _ from "./domain/entities/generic/Collection";
 import { Struct } from "./domain/entities/generic/Struct";
 import { Future } from "./domain/entities/generic/Future";
 
-// Only to be used in repository implementations
-import { D2Api } from "./types/d2-api";
-import { apiToFuture } from "./data/api-futures";
-
 // DOMAIN: entities
 
 class Manager extends Struct<{
@@ -143,9 +139,12 @@ export class ApproveTimeTrackingsUseCase {
 
 // DATA: repository implementations (DHIS2)
 
+import { D2Api } from "./types/d2-api";
+import { apiToFuture } from "./data/api-futures";
+
 export class ManagerD2Repository implements ManagerRepository {
     getById(_id: Id): Async<Manager> {
-        // Get the tracked entity: api.tracker.trackedEntities.get(... trackedEntity.id == id ...)
+        // Get the tracked entity: api.tracker.trackedEntities.get( trackedEntity.id == id )
         // Map the tracked entity (id, attributes) to a manager object.
         return Future.error(new Error("Not implemented"));
     }
@@ -161,7 +160,7 @@ export class TimeTrackingD2Repository implements TimeTrackingRepository {
 
     save(_timeTrackings: TimeTracking[]): Async<void> {
         // Get events (it may not exist) for the trackings:
-        //   api.tracker.events.get(... event.id IN timeTracking.ids ...)
+        //   api.tracker.events.get( event.id IN timeTracking.ids )
         // Update the existing events with the timeTracking to save, and build from zero for the non-existent.
         // Post the updated+new events: api.tracker.post({ events })
         return Future.error(new Error("Not implemented"));
@@ -173,6 +172,12 @@ export class MessageD2Repository implements MessageRepository {
     constructor(private api: D2Api) {}
 
     send(message: Message): Async<void> {
-        return apiToFuture(this.api.email.sendMessage(message));
+        return apiToFuture(
+            this.api.email.sendMessage({
+                recipients: message.recipients,
+                subject: message.title,
+                text: message.text,
+            })
+        );
     }
 }
