@@ -109,6 +109,15 @@ describe("Collection", () => {
         expectTypeOf(valueDefault).toEqualTypeOf<number>();
     });
 
+    test("indexOf", () => {
+        const values = _(["a", "b", "c"]);
+
+        expect(values.indexOf("a")).toEqual(0);
+        expect(values.indexOf("b")).toEqual(1);
+        expect(values.indexOf("c")).toEqual(2);
+        expect(values.indexOf("notFound")).toBeUndefined();
+    });
+
     test("splitAt", () => {
         const values = _([0, 1, 2, 3, 4, 5]);
 
