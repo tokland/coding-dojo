@@ -52,8 +52,8 @@ export class Collection<T> {
         return _c(this.xs.map(fn));
     }
 
-    flatten(): T extends Array<infer U> ? Collection<U> : never {
-        return _c(this.xs.flat()) as any;
+    flatten(): Flatten<T> {
+        return _c(this.xs.flat()) as Flatten<T>;
     }
 
     flatMap<U>(fn: (x: T) => Collection<U>): Collection<U> {
@@ -138,8 +138,8 @@ export class Collection<T> {
         return this.xs[this.xs.length - 1];
     }
 
-    sum(): number {
-        return this.xs.reduce((acc, x) => acc + Number(x), 0);
+    sum(): NumberIfNumber<T> {
+        return (this.xs as number[]).reduce((acc, x) => acc + x, 0) as NumberIfNumber<T>;
     }
 
     take(n: number): Collection<T> {
@@ -298,6 +298,12 @@ export class Collection<T> {
         return HashMap.fromPairs(pairs);
     }
 }
+
+type NumberIfNumber<T> = T extends number ? number : never;
+
+type Flatten<T> = T extends Array<infer U> ? Collection<U> : never;
+
+/* Sorting */
 
 type CompareRes = -1 | 0 | 1;
 

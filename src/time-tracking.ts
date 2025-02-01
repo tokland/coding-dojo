@@ -44,11 +44,6 @@ class CalendarDay extends Struct<{
     day: number;
 }>() {}
 
-class CalendarMonth extends Struct<{
-    year: number;
-    month: number;
-}>() {}
-
 class Message extends Struct<{
     recipients: string[];
     title: string;
@@ -63,10 +58,11 @@ type Async<Data> = Future<Error, Data>;
 
 interface ManagerRepository {
     getById(id: Id): Async<Manager>;
+    getByIds(id: Id[]): Async<Manager[]>;
 }
 
 interface TimeTrackingRepository {
-    getByManager(options: { managerId: Id; months: CalendarMonth[] }): Async<TimeTracking[]>;
+    getAll(): Async<TimeTracking[]>;
     save(timeTrackings: TimeTracking[]): Async<void>;
 }
 
@@ -77,15 +73,37 @@ interface MessageRepository {
 // DOMAIN: use cases
 
 export class GetTimeTrackingsUseCase {
-    constructor(private repositories: { timeTracking: TimeTrackingRepository }) {}
+    constructor(private repositories: { timeTracking: TimeTrackingRepository; manager: ManagerRepository }) {}
 
-    execute(options: { managerId: Id; month: CalendarMonth }): Async<TimeTracking[]> {
-        return this.repositories.timeTracking.getByManager({
-            managerId: options.managerId,
-            months: [options.month],
+    execute(): Async<TimeTrackingAndManager[]> {
+        return this.repositories.timeTracking.getAll().flatMap(timeTrackings => {
+            return this.joinTrackingsAndManagers(timeTrackings);
+        });
+    }
+
+    private joinTrackingsAndManagers(timeTrackings: TimeTracking[]): Async<TimeTrackingAndManager[]> {
+        const managerIds = _(timeTrackings)
+            .map(timeTracking => timeTracking.managerId)
+            .uniq()
+            .value();
+
+        return this.repositories.manager.getByIds(managerIds).map(managers => {
+            const managersById = _(managers).keyBy(manager => manager.id);
+
+            return _(timeTrackings)
+                .compactMap(timeTracking => {
+                    const manager = managersById.get(timeTracking.managerId);
+                    return manager ? { timeTracking, manager } : undefined;
+                })
+                .value();
         });
     }
 }
+
+type TimeTrackingAndManager = {
+    timeTracking: TimeTracking;
+    manager: Manager;
+};
 
 export class ApproveTimeTrackingsUseCase {
     constructor(
@@ -116,7 +134,7 @@ export class ApproveTimeTrackingsUseCase {
     // Create private methods for actions so the `execute` method stays readable
 
     private notifyManagers(timeTrackings: TimeTracking[]): Async<void> {
-        // Future.block looks nice for loops of async operations (but it forces sequential execution)
+        // Future.block is nice for loops of async operations (but it forces sequential execution)
         return Future.block(async $ => {
             for (const managerId of TimeTracking.getManagerIds(timeTrackings)) {
                 const manager = await $(this.repositories.manager.getById(managerId));
@@ -148,12 +166,18 @@ export class ManagerD2Repository implements ManagerRepository {
         // Map the tracked entity (id, attributes) to a manager object.
         return Future.error(new Error("Not implemented"));
     }
+
+    getByIds(id: Id[]): Async<Manager[]> {
+        // Get the tracked entities: api.tracker.trackedEntities.get( trackedEntity.id IN ids )
+        // Map the tracked entities (id, attributes) to manager objects.
+        return Future.error(new Error("Not implemented"));
+    }
 }
 
 export class TimeTrackingD2Repository implements TimeTrackingRepository {
-    getByManager(_options: { managerId: Id; months: CalendarMonth[] }): Async<TimeTracking[]> {
+    getAll(): Async<TimeTracking[]> {
         // Get the events for the time trackings:
-        //   api.tracker.events.get( trackedEntity.id == managerId + occurredAfter/ocurredBefore for months )
+        //   api.tracker.events.get( program.id == timeTrackingProgram.id )
         // map the events (which contains data values) to time trackings.
         return Future.error(new Error("Not implemented"));
     }
