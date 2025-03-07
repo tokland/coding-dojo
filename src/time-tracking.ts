@@ -22,6 +22,8 @@ class TimeTracking extends Struct<{
         return this._update({ isApproved: true });
     }
 
+    /* Collection methods */
+
     static approve(timeTrackings: TimeTracking[]): TimeTracking[] {
         return timeTrackings.map(timeTracking => timeTracking.approve());
     }
@@ -75,35 +77,18 @@ interface MessageRepository {
 export class GetTimeTrackingsUseCase {
     constructor(private repositories: { timeTracking: TimeTrackingRepository; manager: ManagerRepository }) {}
 
-    execute(): Async<TimeTrackingAndManager[]> {
-        return this.repositories.timeTracking.getAll().flatMap(timeTrackings => {
-            return this.joinTrackingsAndManagers(timeTrackings);
-        });
-    }
-
-    private joinTrackingsAndManagers(timeTrackings: TimeTracking[]): Async<TimeTrackingAndManager[]> {
-        const managerIds = _(timeTrackings)
-            .map(timeTracking => timeTracking.managerId)
-            .uniq()
-            .value();
-
-        return this.repositories.manager.getByIds(managerIds).map(managers => {
-            const managersById = _(managers).keyBy(manager => manager.id);
-
-            return _(timeTrackings)
-                .compactMap(timeTracking => {
-                    const manager = managersById.get(timeTracking.managerId);
-                    return manager ? { timeTracking, manager } : undefined;
-                })
-                .value();
-        });
+    execute(): Async<TimeTracking[]> {
+        return this.repositories.timeTracking.getAll();
     }
 }
 
-type TimeTrackingAndManager = {
-    timeTracking: TimeTracking;
-    manager: Manager;
-};
+class GetManagersUseCase {
+    constructor(private managerRepository: ManagerRepository) {}
+
+    execute(managerIds: Id[]): Async<Manager[]> {
+        return this.managerRepository.getByIds(managerIds);
+    }
+}
 
 export class ApproveTimeTrackingsUseCase {
     constructor(
@@ -159,6 +144,7 @@ export class ApproveTimeTrackingsUseCase {
 
 import { D2Api } from "./types/d2-api";
 import { apiToFuture } from "./data/api-futures";
+import React from "react";
 
 export class ManagerD2Repository implements ManagerRepository {
     getById(_id: Id): Async<Manager> {
@@ -167,7 +153,7 @@ export class ManagerD2Repository implements ManagerRepository {
         return Future.error(new Error("Not implemented"));
     }
 
-    getByIds(id: Id[]): Async<Manager[]> {
+    getByIds(_id: Id[]): Async<Manager[]> {
         // Get the tracked entities: api.tracker.trackedEntities.get( trackedEntity.id IN ids )
         // Map the tracked entities (id, attributes) to manager objects.
         return Future.error(new Error("Not implemented"));
@@ -176,8 +162,7 @@ export class ManagerD2Repository implements ManagerRepository {
 
 export class TimeTrackingD2Repository implements TimeTrackingRepository {
     getAll(): Async<TimeTracking[]> {
-        // Get the events for the time trackings:
-        //   api.tracker.events.get( program.id == timeTrackingProgram.id )
+        // Get the events for the trackings: api.tracker.events.get( program.id == timeTrackingProgram.id )
         // map the events (which contains data values) to time trackings.
         return Future.error(new Error("Not implemented"));
     }
@@ -185,7 +170,7 @@ export class TimeTrackingD2Repository implements TimeTrackingRepository {
     save(_timeTrackings: TimeTracking[]): Async<void> {
         // Get events (it may not exist) for the trackings:
         //   api.tracker.events.get( event.id IN timeTracking.ids )
-        // Update the existing events with the timeTracking to save, and build from zero for the non-existent.
+        // Update the existing events with the timeTracking to save, or build for the non-existent.
         // Post the updated+new events: api.tracker.post({ events })
         return Future.error(new Error("Not implemented"));
     }
@@ -204,4 +189,80 @@ export class MessageD2Repository implements MessageRepository {
             })
         );
     }
+}
+
+// COMPOSITION ROOT
+
+type CompositionRoot = {
+    getTimeTrackingsUseCase: GetTimeTrackingsUseCase;
+    getManagersUseCase: GetManagersUseCase;
+};
+
+declare const compositionRoot: CompositionRoot;
+
+// VIEW
+
+// Rows containing time trackings with manager information
+
+type TimeTrackingViewModelProps = {
+    timeTracking: TimeTracking;
+    manager: Manager;
+};
+
+export class TimeTrackingViewModel extends Struct<TimeTrackingViewModelProps>() {
+    get id(): string {
+        return [this.timeTracking.id, this.manager.id].join("-");
+    }
+}
+
+// VIEW (loading custom hook)
+
+type LoadState<Data> =
+    | { type: "loading" } //
+    | { type: "loaded"; data: Data }
+    | { type: "error"; error: Error };
+
+type TimeTrackingsLoadState = LoadState<{ timeTrackings: TimeTrackingViewModel[] }>;
+
+declare const useCompositionRoot: () => CompositionRoot;
+
+export function useTimeTrackings(): TimeTrackingsLoadState {
+    const compositionRoot = useCompositionRoot();
+    const [state, setState] = React.useState<TimeTrackingsLoadState>({ type: "loading" });
+
+    React.useEffect(() => {
+        return getTimeTrackings(compositionRoot).run(
+            timeTrackings => setState({ type: "loaded", data: { timeTrackings: timeTrackings } }),
+            error => setState({ type: "error", error: error })
+        );
+    }, [setState]);
+
+    return state;
+}
+
+function getTimeTrackings(compositionRoot: CompositionRoot): Async<TimeTrackingViewModel[]> {
+    return compositionRoot.getTimeTrackingsUseCase.execute().flatMap(timeTrackings => {
+        const managerIds = TimeTracking.getManagerIds(timeTrackings);
+
+        return compositionRoot.getManagersUseCase.execute(managerIds).map(managers => {
+            return buildTimeTrackingViewModels(timeTrackings, managers);
+        });
+    });
+}
+
+function buildTimeTrackingViewModels(
+    timeTrackings: TimeTracking[],
+    managers: Manager[]
+): TimeTrackingViewModel[] {
+    const managersById = _(managers).keyBy(manager => manager.id);
+
+    return _(timeTrackings)
+        .compactMap(timeTracking => {
+            const manager = managersById.get(timeTracking.managerId);
+
+            return manager
+                ? TimeTrackingViewModel.create({ timeTracking: timeTracking, manager: manager })
+                : undefined; // Skip time trackings without a manager
+        })
+        .value();
 }
