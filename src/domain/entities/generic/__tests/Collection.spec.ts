@@ -103,10 +103,6 @@ describe("Collection", () => {
         const valueNotFound = values.find(value => value === 4);
         expect(valueNotFound).toEqual(undefined);
         expectTypeOf(valueNotFound).toEqualTypeOf<number | undefined>();
-
-        const valueDefault = values.find(value => value === 4, { or: 10 });
-        expect(valueDefault).toEqual(10);
-        expectTypeOf(valueDefault).toEqualTypeOf<number>();
     });
 
     test("splitAt", () => {
@@ -266,6 +262,12 @@ describe("Collection", () => {
         ).toEqual(sortedObjects);
     });
 
+    test("forEach", () => {
+        const values: number[] = [];
+        _([1, 2, 3]).forEach(x => values.push(x));
+        expect(values).toEqual([1, 2, 3]);
+    });
+
     test("zipLongest", () => {
         expect(
             _([1, 2, 3])
@@ -330,5 +332,17 @@ describe("Collection", () => {
         expect(hashMap.size).toEqual(2);
         expect(hashMap.get(2)).toEqual("1");
         expect(hashMap.get(4)).toEqual("2");
+    });
+});
+
+describe("Direct style", () => {
+    test("_.map", () => {
+        const values = _.map([1, 2, 3], x => 2 * x);
+        expect(values).toEqual([2, 4, 6]);
+    });
+
+    test("_.sum", () => {
+        const values = _.sum([1, 2, 3]);
+        expect(values).toEqual(6);
     });
 });

@@ -17,7 +17,6 @@ import { HashMap } from "./HashMap";
 
 export class Collection<T> {
     protected xs: T[];
-
     protected constructor(values: T[]) {
         this.xs = values;
     }
@@ -40,7 +39,9 @@ export class Collection<T> {
         return this.xs;
     }
 
-    toArray = this.value;
+    toArray(): T[] {
+        return this.value();
+    }
 
     get size() {
         return this.xs.length;
@@ -49,6 +50,10 @@ export class Collection<T> {
     /* Methods that return a Collection */
 
     map<U>(fn: (x: T) => U): Collection<U> {
+        return _c(this.xs.map(fn));
+    }
+
+    isomap(fn: (x: T) => T): Collection<T> {
         return _c(this.xs.map(fn));
     }
 
@@ -64,7 +69,9 @@ export class Collection<T> {
         return _c(this.xs.filter(pred));
     }
 
-    filter = this.select;
+    filter(pred: (x: T) => boolean): Collection<T> {
+        return this.select(pred);
+    }
 
     reject(pred: (x: T) => boolean): Collection<T> {
         return _c(this.xs.filter(x => !pred(x)));
@@ -94,16 +101,20 @@ export class Collection<T> {
         return this.xs.every(pred);
     }
 
-    all = this.every;
+    all(pred: (x: T) => boolean): boolean {
+        return this.every(pred);
+    }
 
     some(pred: (x: T) => boolean): boolean {
         return this.xs.some(pred);
     }
 
-    any = this.some;
+    any(pred: (x: T) => boolean): boolean {
+        return this.some(pred);
+    }
 
-    find<Or extends T | undefined>(pred: (x: T) => boolean, options: { or?: Or } = {}): T | Or {
-        return this.xs.find(pred) || (options?.or as Or);
+    find(pred: (x: T) => boolean): T | undefined {
+        return this.xs.find(pred);
     }
 
     sort(): Collection<T> {
@@ -240,7 +251,9 @@ export class Collection<T> {
         }
     }
 
-    // forEach(fn: (value: T) => void): void
+    forEach(fn: (value: T) => void): void {
+        this.xs.forEach(fn);
+    }
 
     zipLongest<S>(xs: Collection<S>): Collection<[T | undefined, S | undefined]> {
         const max = Math.max(this.size, xs.size);
@@ -252,10 +265,7 @@ export class Collection<T> {
 
     zip<S>(xs: Collection<S>): Collection<[T, S]> {
         const min = Math.min(this.size, xs.size);
-        const pairs = Collection.range(0, min)
-            .map(i => [this.xs[i], xs.xs[i]] as [T, S])
-            .value();
-        return _c(pairs);
+        return Collection.range(0, min).map(i => [this.xs[i], xs.xs[i]] as [T, S]);
     }
 
     /* Methods that return HashMap */
@@ -269,7 +279,9 @@ export class Collection<T> {
         }, initialValue);
     }
 
-    keyBy = this.indexBy;
+    keyBy(grouperFn: (x: T) => string): HashMap<string, T> {
+        return this.indexBy(grouperFn);
+    }
 
     groupBy<U>(grouperFn: (x: T) => U): HashMap<U, T[]> {
         const map = this.reduce((acc, value) => {
@@ -326,6 +338,78 @@ function compareArray<T>(a: T, b: T, items: OrderItem<T>[]): CompareRes {
 
 type OrderItem<T> = [(obj: T) => unknown, "asc" | "desc"];
 
-export default function _c<T>(xs: T[]): Collection<T> {
-    return Collection.from(xs);
+/* Direct function invocation style */
+
+type CollectionFns = {
+    map: <T, U>(xs: T[], fn: (x: T) => U) => U[];
+    isomap: <T>(xs: T[], fn: (x: T) => T) => T[];
+    flatten: <T>(xs: T[][]) => T[];
+    flatMap: <T, U>(xs: T[], fn: (x: T) => U[]) => U[];
+    select: <T>(xs: T[], pred: (x: T) => boolean) => T[];
+    reject: <T>(xs: T[], pred: (x: T) => boolean) => T[];
+    enumerate: <T>(xs: T[]) => [number, T][];
+    compact: <T>(xs: (T | null | undefined)[]) => NonNullable<T>[];
+    compactMap: <T, U>(xs: T[], fn: (x: T) => U | undefined | null) => NonNullable<U>[];
+    append: <T>(xs: T[], x: T) => T[];
+    includes: <T>(xs: T[], x: T) => boolean;
+    every: <T>(xs: T[], pred: (x: T) => boolean) => boolean;
+    some: <T>(xs: T[], pred: (x: T) => boolean) => boolean;
+    find: <T>(xs: T[], pred: (x: T) => boolean) => T | undefined;
+    sort: <T>(xs: T[]) => T[];
+    reverse: <T>(xs: T[]) => T[];
+    sortWith: <T>(xs: T[], compareFn: (a: T, b: T) => number) => T[];
+    sortBy: <T, U>(xs: T[], fn: (x: T) => U, options: { compareFn?: (a: U, b: U) => number }) => T[];
+    orderBy: <T>(xs: T[], items: OrderItem<T>[]) => T[];
+    first: <T>(xs: T[]) => T | undefined;
+    last: <T>(xs: T[]) => T | undefined;
+    sum: <T>(xs: number[]) => NumberIfNumber<T>;
+    take: <T>(xs: T[], n: number) => T[];
+    drop: <T>(xs: T[], n: number) => T[];
+    pairwise: <T>(xs: T[]) => [T, T][];
+    prepend: <T>(xs: T[], x: T) => T[];
+    tap: <T>(xs: T[], fn: (xs: T[]) => void) => T[];
+    splitAt: <T>(xs: T[], indexes: number[]) => T[][];
+    thru: <T, U>(xs: T[], fn: (xs: T[]) => U[]) => U[];
+    join: <T>(xs: T[], char: string) => string;
+    get: <T>(xs: T[], idx: number) => T | undefined;
+    getMany: <T>(xs: T[], idxs: number[]) => (T | undefined)[];
+    intersperse: <T>(xs: T[], value: T) => T[];
+    uniq: <T>(xs: T[]) => T[];
+    uniqBy: <T, U>(xs: T[], mapper: (value: T) => U) => T[];
+    reduce: <T, U>(xs: T[], mapper: (acc: U, value: T) => U, initialAcc: U) => U;
+    chunk: <T>(xs: T[], size: number) => T[][];
+    cartesian: <T>(xs: T[][]) => T[][];
+    zipLongest: <T, S>(xs: T[], ys: S[]) => [T | undefined, S | undefined][];
+    zip: <T, S>(xs: T[], ys: S[]) => [T, S][];
+    indexBy: <T, U>(xs: T[], grouperFn: (x: T) => U) => HashMap<U, T>;
+    groupBy: <T, U>(xs: T[], grouperFn: (x: T) => U) => HashMap<U, T[]>;
+    groupFromMap: <T, U, W>(xs: T[], pairGrouperFn: (x: T) => [U, W]) => HashMap<U, W[]>;
+    toHashMap: <T, K, V>(xs: T[], toPairFn: (x: T) => [K, V]) => HashMap<K, V>;
+};
+
+function getClassMethods(cls: any) {
+    return Object.entries(Object.getOwnPropertyDescriptors(cls.prototype))
+        .map(([name, descriptor]) => (typeof descriptor.value === "function" ? name : null))
+        .filter(Boolean) as string[];
 }
+
+const fns = Object.fromEntries(
+    getClassMethods(Collection).map(name => {
+        function fn(xs: any, ...args: any[]) {
+            const collection = Collection.from(xs);
+            const method = (collection as any)[name].bind(collection);
+            const result = method(...args);
+            return result instanceof Collection ? result.toArray() : result;
+        }
+        return [name, fn];
+    })
+) as CollectionFns;
+
+interface CollectionObj extends CollectionFns {
+    <T>(xs: T[]): Collection<T>;
+}
+
+const _c = (<T>(xs: T[]) => Collection.from(xs)) as CollectionObj;
+Object.assign(_c, fns);
+
+export default _c;
